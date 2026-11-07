@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card mb-4">
+    <div class="card-body py-3">
+        <div class="row g-2 align-items-center">
+            <div class="col-auto">
+                <label class="col-form-label fw-semibold">Період:</label>
+            </div>
+            <div class="col-auto">
+                <a href="{{ url_for('main.index', period='all') }}"
+                   class="btn {% if is_all %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    Весь час
+                </a>
+            </div>
+            <div class="col-auto">
+                <form method="get" action="{{ url_for('main.index') }}" class="d-flex gap-2">
+                    <select name="month" class="form-select" onchange="this.form.submit()">
+                        {% for m_num, m_name in months.items() %}
+                            <option value="{{ m_num }}" {% if m_num == month and not is_all %}selected{% endif %}>{{ m_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="year" class="form-select" onchange="this.form.submit()">
+                        {% for y in years %}
+                            <option value="{{ y }}" {% if y == year and not is_all %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+            <div class="col-auto">
+                <span class="badge bg-secondary fs-6">{{ period_label }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-bg-success">
+            <div class="card-body">
+                <h6 class="card-title">Доходи</h6>
+                <h3>{{ "%.2f"|format(summary.income) }} ₴</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-bg-danger">
+            <div class="card-body">
+                <h6 class="card-title">Витрати</h6>
+                <h3>{{ "%.2f"|format(summary.expense) }} ₴</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-bg-primary">
+            <div class="card-body">
+                <h6 class="card-title">Баланс</h6>
+                <h3>{{ "%.2f"|format(summary.balance) }} ₴</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        {% if is_all %}
+        <div class="card text-bg-dark">
+            <div class="card-body">
+                <h6 class="card-title">Режим</h6>
+                <h3 style="font-size: 1.3rem;">Весь час</h3>
+            </div>
+        </div>
+        {% else %}
+        <div class="card {% if summary.is_over_budget %}text-bg-warning{% else %}text-bg-secondary{% endif %}">
+            <div class="card-body">
+                <h6 class="card-title">Залишок бюджету</h6>
+                {% if summary.budget_remaining is not none %}
+                    <h3>{{ "%.2f"|format(summary.budget_remaining) }} ₴</h3>
+                {% else %}
+                    <h3>—</h3>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Діаграма по категоріях — {{ period_label }}</div>
+            <div class="card-body">
+                <canvas id="categoryChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        {% if not is_all %}
+        <div class="card">
+            <div class="card-header">Встановити бюджет на {{ month_name }} {{ year }}</div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('main.set_budget') }}">
+                    <input type="hidden" name="year" value="{{ year }}">
+                    <input type="hidden" name="month" value="{{ month }}">
+                    <div class="mb-3">
+                        <label class="form-label">Ліміт витрат (₴)</label>
+                        <input type="number" step="0.01" name="limit" class="form-control"
+                               value="{{ budget.limit_amount if budget else '' }}" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Зберегти бюджет</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        <div class="card {% if not is_all %}mt-3{% endif %}">
+            <div class="card-header">Додати транзакцію</div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('main.add_transaction', year=year, month=month) }}">
+                    <div class="mb-2">
+                        <label class="form-label">Сума</label>
+                        <input type="number" step="0.01" name="amount" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Категорія</label>
+                        <select name="category_id" class="form-select" required>
+                            {% for cat in categories %}
+                                <option value="{{ cat.id }}">{{ cat.name }} ({{ 'дохід' if cat.type == 'income' else 'витрата' }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Опис</label>
+                        <input type="text" name="description" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Дата</label>
+                        <input type="date" name="date" class="form-control"
+                               value="{{ year }}-{{ '%02d'|format(month) }}-01">
+                    </div>
+                    <button type="submit" class="btn btn-success">Додати</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Транзакції — {{ period_label }}</div>
+    <div class="card-body p-0">
+        <table class="table table-striped mb-0">
+            <thead>
+                <tr>
+                    <th>Дата</th>
+                    <th>Категорія</th>
+                    <th>Опис</th>
+                    <th class="text-end">Сума</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tx in transactions %}
+                <tr>
+                    <td>{{ tx.date }}</td>
+                    <td>
+                        <span class="badge" style="background-color: {{ tx.category.color }}">
+                            {{ tx.category.name }}
+                        </span>
+                    </td>
+                    <td>{{ tx.description or '—' }}</td>
+                    <td class="text-end {% if tx.is_income %}text-success{% else %}text-danger{% endif %}">
+                        {% if tx.is_income %}+{% else %}-{% endif %}{{ "%.2f"|format(tx.amount) }} ₴
+                    </td>
+                    <td>
+                        <form method="post" action="{{ url_for('main.delete_transaction', tx_id=tx.id) }}" class="d-inline">
+                            {% if is_all %}
+                                <input type="hidden" name="period" value="all">
+                            {% else %}
+                                <input type="hidden" name="year" value="{{ year }}">
+                                <input type="hidden" name="month" value="{{ month }}">
+                            {% endif %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Видалити?')">✕</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="text-center text-muted">Немає транзакцій</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const breakdown = {{ breakdown | tojson }};
+const ctx = document.getElementById('categoryChart');
+if (breakdown.labels && breakdown.labels.length > 0) {
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: breakdown.labels,
+            datasets: [{
+                data: breakdown.values,
+                backgroundColor: breakdown.colors,
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+} else {
+    ctx.parentElement.innerHTML = '<p class="text-muted text-center mb-0">Немає даних для діаграми</p>';
+}
+</script>
+{% endblock %}

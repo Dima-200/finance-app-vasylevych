@@ -4,7 +4,7 @@
 
 ## Стек
 
-- Python 3.11+
+- Python 3.9.13
 - Flask 3
 - SQLAlchemy 2 (ORM)
 - SQLite
